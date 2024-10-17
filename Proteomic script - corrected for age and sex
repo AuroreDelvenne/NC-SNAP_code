@@ -1,0 +1,160 @@
+install.packages("ggplot2")
+install.packages("foreign")
+install.packages("graphics")
+install.packages("tidyr")
+install.packages("emmeans")
+install.packages("lmerTest")
+install.packages("mixtools")
+install.packages("reshape2")
+
+require(ggplot2) 
+library(foreign)
+require(graphics)
+library(tidyr)
+require(emmeans)
+library(lmerTest)
+require(mixtools)
+library(reshape2)
+
+rm(list = ls())
+
+wd ='/Users/NC-SNAP/results/' 
+setwd(wd)
+
+data_dir='/Users/NC-SNAP/data/' 
+
+load(paste(data_dir,'prot_mat.RData',sep=''))
+
+#### definieer de contrasten ####
+
+# SNAP.contrast
+prot_mat$SNAP.contrast=NA # intitialiseer eerst
+prot_mat$SNAP.contrast[which(prot_mat$Diagnosis=='CN' & prot_mat$Local_AB42_Abnormal=='0' & prot_mat$Local_PTAU_Abnormal=='0')]='NC a-t-'
+prot_mat$SNAP.contrast[which(prot_mat$Diagnosis=='CN' & prot_mat$Local_AB42_Abnormal=='0' & prot_mat$Local_PTAU_Abnormal=='1')]='NC a-t+' 
+prot_mat$SNAP.contrast[which(prot_mat$Diagnosis=='CN' & prot_mat$Local_AB42_Abnormal=='1' & prot_mat$Local_PTAU_Abnormal=='0')]='NC a+t-' 
+prot_mat$SNAP.contrast[which(prot_mat$Diagnosis=='CN' & prot_mat$Local_AB42_Abnormal=='1' & prot_mat$Local_PTAU_Abnormal=='1')]='NC a+t+'
+
+prot_mat$SNAP.contrast=factor(prot_mat$SNAP.contrast,levels=c("NC a-t-" ,"NC a-t+", "NC a+t-","NC a+t+"))
+table(prot_mat$SNAP.contrast)
+
+prot_mat$hoofd.contrast=NA
+
+prot_ind=2:3104 # dit zijn de kolommen met eiwitten
+all(prot_mat[,prot_ind]>0,na.rm=T)
+
+prot_mat[,prot_ind]=apply(prot_mat[,prot_ind],2,log)
+all_prot_mat=prot_mat
+
+for(i in 1:length(prot_ind)){
+  tmean=mean(prot_mat[prot_mat$SNAP.contrast=='NC a-t-',prot_ind[i]],na.rm=T)
+  tsd=sd(prot_mat[prot_mat$SNAP.contrast=='NC a-t-',prot_ind[i]],na.rm=T)
+
+  prot_mat[,prot_ind[i]]=(prot_mat[,prot_ind[i]]-tmean)/tsd  
+  
+}
+
+apply(prot_mat[,prot_ind[1:10]],2,function(x) mean(x,na.rm=T))
+by(prot_mat[,prot_ind[1]],prot_mat$SNAP.contrast,function(x) mean(x,na.rm=T))
+
+
+prot_mat=cbind.data.frame(prot_mat,Ptau.Z=rep(NA,length(prot_mat[,1])), Ttau.Z=rep(NA,length(prot_mat[,1])),Central.NFL=rep(NA,length(prot_mat[,1])),Central.NRGN=rep(NA,length(prot_mat[,1])),Central.YKL40=rep(NA,length(prot_mat[,1])),Central.AB38=rep(NA,length(prot_mat[,1])),Central.AB40=rep(NA,length(prot_mat[,1])),Central.AB42=rep(NA,length(prot_mat[,1])),Central.AB4240ratio=rep(NA,length(prot_mat[,1])) )
+
+to_z=c("Ptau_ASSAY_Zscore", "Ttau_ASSAY_Zscore", "Central_CSF_NFL","Central_CSF_Neurogranin", "Central_CSF_YKL40", "Central_CSF_AB38", "Central_CSF_AB40", "Central_CSF_AB42", "Central_CSF_AB4240ratio" )
+
+z_ed=3160:3168
+names(prot_mat)[z_ed]
+
+for(i in 1:length(z_ed)){
+  
+  tmean= mean(prot_mat[prot_mat$SNAP.contrast=='NC a-t-',to_z[i]],na.rm=T)
+    tsd=sd(prot_mat[prot_mat$SNAP.contrast=='NC a-t-',to_z[i]],na.rm=T)
+  prot_mat[,z_ed[i]]= (prot_mat[,to_z[i]]-tmean)/tsd
+  
+}
+
+prot_ind=c(z_ed,prot_ind)
+
+
+res_mat = data.frame(matrix(NA, nrow = length(prot_ind), ncol = 22))
+
+names(res_mat)=c('Protein',
+                 'Uniprot',
+                 'number of observations',
+                 'Controls mean (sd)',
+                 'Controls emm (se)',
+                 'NC A-T+ mean (sd)',
+                 'NC A-T+ emm (se)',     
+                 'NC A+T- mean (sd)',
+                 'NC A+T- emm (se)',
+                 'NC A+T+ mean (sd)',
+                 'NC A+T+ emm (se)',
+                 
+                 'diff controls vs NC A-T+',
+                 'p controls vs NC A-T+',
+                'diff controls vs NC A+T-',
+                 'p controls vs NC A+T-',
+                 'diff controls vs NC A+T+',
+                 'p controls vs NC A+T+',
+                 
+                'diff NC A-T+ vs NC A+T-',
+                'p MCI-NC A-T+ vs NC A+T-',
+                 'diff NC A-T+ vs NC A+T+',
+                 'p NC A-T+ vs NC A+T+',
+                 
+                 'diff NC A+T- vs NC A+T+',
+                 'p NC A+T- vs NC A+T+')
+                 
+rownames(res_mat)=names(prot_mat)[prot_ind]
+            
+prot_mat$AGE.centered=scale(prot_mat$Age,center=T,scale=F)
+
+prot_mat$Gender=factor(prot_mat$Gender)
+
+sub_prot_mat=prot_mat[which(!is.na(prot_mat$SNAP.contrast)), ]
+
+for(i in 1:length(prot_ind)){
+
+  if(i >9){
+    res_mat[i,1]=as.vector(my_data2$Accession[which(my_data2$GENE==names(sub_prot_mat)[prot_ind[i]])])
+    
+  }
+
+
+  res_mat[i,2]=sum(!is.na(sub_prot_mat[,prot_ind[i]]))
+  
+ 
+  if(res_mat[i,2]>9){
+
+    tprot_mat=sub_prot_mat
+  
+    tprot=tprot_mat[,prot_ind[i]]
+    
+    tres=by(tprot,tprot_mat$SNAP.contrast,function(x) mean(x, na.rm=T))
+    tres2=by(tprot,tprot_mat$SNAP.contrast,function(x) sd(x, na.rm=T))
+    
+
+    res_mat[i,c(3,5,7,9)]=paste(round(tres,2), ' (', round(tres2,2),')',sep='')
+
+   if(all(table(tprot_mat$SNAP.contrast[!is.na(tprot)])>2)){
+     
+    
+     tres=lm(tprot~AGE.centered+Gender+SNAP.contrast,data=tprot_mat)
+    
+     temmeans=test(emmeans(tres,pairwise~SNAP.contrast),adjust='none')
+     
+    
+     res_mat[i, c(4,6,8,10)]=paste(round(temmeans$emmeans$emmean,2),' (',
+                                round(temmeans$emmeans$SE,2),
+                                ')',sep='')
+     
+     # voeg de differences & de pvalues tussen de groepen toe
+     res_mat[i, c(11,13,15,17,19,21)]=round(temmeans$contrasts$estimate,2)
+     res_mat[i, c(12,14,16,18,20,22)]=round(temmeans$contrasts$p.value,5)
+   
+   }
+  }
+    
+}
+
+write.table(res_mat,'results_CSFproteomics_NCSNAP_corr_age_sex.txt',sep='\t')
+
