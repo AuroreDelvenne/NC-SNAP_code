@@ -110,6 +110,8 @@ prot_mat$AGE.centered=scale(prot_mat$Age,center=T,scale=F)
 
 prot_mat$Gender=factor(prot_mat$Gender)
 
+prot_mat$APOEdich=factor(prot_mat$APOEdich)
+
 sub_prot_mat=prot_mat[which(!is.na(prot_mat$SNAP.contrast)), ]
 
 for(i in 1:length(prot_ind)){
@@ -138,7 +140,7 @@ for(i in 1:length(prot_ind)){
    if(all(table(tprot_mat$SNAP.contrast[!is.na(tprot)])>2)){
      
     
-     tres=lm(tprot~AGE.centered+Gender+SNAP.contrast,data=tprot_mat)
+     tres=lm(tprot~AGE.centered+Gender+APOEdich+SNAP.contrast,data=tprot_mat)
     
      temmeans=test(emmeans(tres,pairwise~SNAP.contrast),adjust='none')
      
